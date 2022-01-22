@@ -72,7 +72,7 @@ if [ ! -d "bin/harfbuzz" ]; then
 
 	SED=sed
 
-	if [ "$OSTYPE" = "darwin"* ]; then
+	if [[ "$OSTYPE" = "darwin"* ]]; then
 		SED=gsed
 	fi
 

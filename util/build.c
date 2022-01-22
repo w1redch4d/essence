@@ -246,7 +246,7 @@ void OutputStartOfBuildINI(FILE *f, bool forceDebugBuildOff) {
 }
 
 void BuildUtilities();
-void DoCommand(const char *l);
+bool DoCommand(const char *l);
 void SaveConfig();
 
 #define COMPILE_SKIP_COMPILE         (1 << 1)
@@ -1398,7 +1398,7 @@ void RunTests(int singleTest) {
 	if (failureCount && automatedBuild) exit(1);
 }
 
-void DoCommand(const char *l) {
+bool DoCommand(const char *l) {
 	while (l && (*l == ' ' || *l == '\t')) l++;
 
 	{
@@ -1414,54 +1414,8 @@ void DoCommand(const char *l) {
 		}
 	}
 
-	if (0 == strcmp(l, "b") || 0 == strcmp(l, "build")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, -1, LOG_NORMAL);
-	} else if (0 == strcmp(l, "opt") || 0 == strcmp(l, "build-optimised")) {
-		BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, -1, LOG_NORMAL);
-	} else if (0 == strcmp(l, "d") || 0 == strcmp(l, "debug")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, true /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "dlv")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, true /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
-	} else if (0 == strcmp(l, "d3") || 0 == strcmp(l, "debug-without-compile")) {
-		BuildAndRun(OPTIMISE_OFF, false /* compile */, true /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "v") || 0 == strcmp(l, "vbox")) {
-		BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
-	} else if (0 == strcmp(l, "v2") || 0 == strcmp(l, "vbox-without-opt")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
-	} else if (0 == strcmp(l, "v3") || 0 == strcmp(l, "vbox-without-compile")) {
-		BuildAndRun(OPTIMISE_OFF, false /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
-	} else if (0 == strcmp(l, "t") || 0 == strcmp(l, "qemu-with-opt")) {
-		BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "t2") || 0 == strcmp(l, "test")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "t3") || 0 == strcmp(l, "qemu-without-compile")) {
-		BuildAndRun(OPTIMISE_OFF, false /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "t4")) {
-		BuildAndRun(OPTIMISE_FULL, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "e")) {
-		Run(EMULATOR_QEMU, LOG_NORMAL, DEBUG_LATER);
-	} else if (0 == strcmp(l, "k") || 0 == strcmp(l, "qemu-with-kvm")) {
-		BuildAndRun(OPTIMISE_FULL, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "kno")) {
-		BuildAndRun(OPTIMISE_ON, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "kd")) {
-		BuildAndRun(OPTIMISE_OFF, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
-	} else if (0 == strcmp(l, "klv")) {
-		BuildAndRun(OPTIMISE_FULL, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
-	} else if (0 == strcmp(l, "tlv")) {
-		BuildAndRun(OPTIMISE_ON, true /* compile */, DEBUG_LATER /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
-	} else if (0 == strcmp(l, "exit") || 0 == strcmp(l, "x") || 0 == strcmp(l, "quit") || 0 == strcmp(l, "q")) {
+	if (0 == strcmp(l, "exit") || 0 == strcmp(l, "x") || 0 == strcmp(l, "quit") || 0 == strcmp(l, "q")) {
 		exit(0);
-	} else if (0 == strcmp(l, "compile") || 0 == strcmp(l, "c")) {
-		LoadOptions();
-		Compile(COMPILE_FOR_EMULATOR, atoi(GetOptionString("Emulator.PrimaryDriveMB")), NULL);
-	} else if (0 == strcmp(l, "build-cross")) {
-		BuildCrossCompiler();
-		SaveConfig();
-		printf("Please restart the build system.\n");
-		exit(0);
-	} else if (0 == strcmp(l, "build-utilities") || 0 == strcmp(l, "u")) {
-		BuildUtilities();
 	} else if (0 == strcmp(l, "make-installer-archive")) {
 		CallSystem("gcc -O3 -o bin/lzma ports/lzma/LzmaUtil.c ports/lzma/LzmaDec.c ports/lzma/LzmaEnc.c "
 				"ports/lzma/7zStream.c ports/lzma/Threads.c ports/lzma/LzFindMt.c ports/lzma/LzFind.c "
@@ -1641,75 +1595,6 @@ void DoCommand(const char *l) {
 		closedir(directory);
 	} else if (0 == memcmp(l, "do ", 3)) {
 		CallSystem(l + 3);
-	} else if (0 == memcmp(l, "live ", 5) || 0 == strcmp(l, "live")) {
-		if (interactiveMode) {
-			fprintf(stderr, "This command cannot be used in interactive mode. Type \"quit\" and then run \"./start.sh live <...>\".\n");
-			return;
-		}
-
-		if (argc < 4) {
-			fprintf(stderr, "Usage: \"./start.sh live <iso/raw> <drive size in MB> [extra options]\".\n");
-			return;
-		}
-
-		bool wantISO = 0 == strcmp(argv[2], "iso");
-		uint32_t flags = OPTIMISE_ON | COMPILE_DO_BUILD;
-		const char *label = NULL;
-
-		for (int i = 4; i < argc; i++) {
-			if (0 == strcmp(argv[i], "noopt")) {
-				flags &= ~OPTIMISE_ON;
-				flags |= OPTIMISE_OFF;
-			} else if (0 == memcmp(argv[i], "label=", 6)) {
-				label = argv[i] + 6;
-			}
-		}
-
-		forceRebuild = true;
-		Compile(flags, atoi(argv[3]), label);
-
-		if (encounteredErrors) {
-			printf("\033[0;33mBuild failed.\n" ColorNormal);
-			return;
-		}
-
-		if (!wantISO) {
-			printf("You can copy the image to the device with "
-					ColorHighlight "sudo dd if=bin/drive of=<path to drive> bs=1024 count=%d conv=notrunc" ColorNormal "\n", 
-					atoi(argv[3]) * 1024);
-			return;
-		}
-
-		if (CallSystem("xorriso --version")) {
-			printf("\033[0;33mCould not produce iso image; xorriso not found.\n" ColorNormal);
-			return;
-		}
-
-		char buffer[512];
-		FILE *f = fopen("bin/drive", "rb");
-		fseek(f, 0x102000, SEEK_SET);
-		fread(buffer, 1, sizeof(buffer), f);
-		fclose(f);
-
-		if (memcmp(buffer, "!EssenceFS2", 11)) {
-			printf("\033[0;33mCould not produce iso image (1).\n" ColorNormal);
-			return;
-		}
-
-		f = fopen("bin/appuse.txt", "wb");
-		fprintf(f, "Essence::%.*s", 16, buffer + 152);
-		fclose(f);
-
-		unlink("bin/essence.iso");
-
-		if (CallSystem("xorriso -rockridge \"off\" -outdev bin/essence.iso -blank as_needed -volid \"Essence Installation Disc\" "
-				"-map bin/drive /ESSENCE.DAT -boot_image any bin_path=/ESSENCE.DAT -boot_image any emul_type=hard_disk "
-				"-application_use bin/appuse.txt")) {
-			printf("\033[0;33mCould not produce iso image (2).\n" ColorNormal);
-			return;
-		}
-
-		printf("Created " ColorHighlight "bin/essence.iso" ColorNormal ".\n");
 	} else if (0 == strcmp(l, "line-count")) {
 		FILE *f = fopen("bin/count.tmp", "wb");
 		fprintf(f, "0");
@@ -1750,52 +1635,6 @@ void DoCommand(const char *l) {
 		printf(ColorNormal);
 	} else if (0 == memcmp(l, "a2l ", 4)) {
 		AddressToLine(l + 3);
-	} else if (0 == strcmp(l, "build-port") || 0 == memcmp(l, "build-port ", 11)) {
-		bool alreadyNamedPort = l[10] == ' ';
-		char *l2 = NULL;
-
-		if (!alreadyNamedPort) {
-			printf("\nAvailable ports:\n");
-			DIR *directory = opendir("ports");
-			struct dirent *entry;
-
-			while ((entry = readdir(directory))) {
-				char buffer[4096];
-				snprintf(buffer, sizeof(buffer), "ports/%s/port.sh", entry->d_name);
-				FILE *f = fopen(buffer, "rb");
-
-				if (f) {
-					printf("\t%s\n", entry->d_name);
-					fclose(f);
-				}
-			}
-
-			closedir(directory);
-
-			LoadOptions();
-
-			if (!IsOptionEnabled("Flag.ENABLE_POSIX_SUBSYSTEM")) {
-				printf("\nMost ports require the POSIX subsystem to be enabled.\n");
-				printf("Run " ColorHighlight "config" ColorNormal " and select " ColorHighlight "Flag.ENABLE_POSIX_SUBSYSTEM" ColorNormal " to enable it.\n");
-			}
-
-			printf("\nEnter the port to be built: ");
-			size_t pos;
-			getline(&l2, &pos, stdin);
-			l2[strlen(l2) - 1] = 0;
-		} else {
-			l2 = (char *) l + 11;
-		}
-
-		int status = CallSystemF("ports/%s/port.sh", l2);
-
-		if (!alreadyNamedPort) {
-			free(l2);
-		}
-
-		if (automatedBuild) {
-			exit(status);
-		}
 	} else if (0 == memcmp(l, "get-source ", 11)) {
 		GetSource(l + 11, NULL);
 	} else if (0 == memcmp(l, "get-source-checked ", 19)) {
@@ -1838,32 +1677,6 @@ void DoCommand(const char *l) {
 		RunTests(-1);
 	} else if (0 == memcmp(l, "run-test ", 9)) {
 		RunTests(atoi(l + 9));
-	} else if (0 == strcmp(l, "setup-pre-built-toolchain")) {
-		CallSystem("mv bin/source cross");
-		CallSystem("mkdir -p cross/bin2");
-#define MAKE_TOOLCHAIN_WRAPPER(tool) \
-		CallSystem("gcc -o cross/bin2/" TOOLCHAIN_PREFIX "-" tool " util/toolchain_wrapper.c -Wall -Wextra -Wno-format-truncation -g -DTOOL=" TOOLCHAIN_PREFIX "-" tool)
-		MAKE_TOOLCHAIN_WRAPPER("addr2line");
-		MAKE_TOOLCHAIN_WRAPPER("ar");
-		MAKE_TOOLCHAIN_WRAPPER("as");
-		MAKE_TOOLCHAIN_WRAPPER("c++");
-		MAKE_TOOLCHAIN_WRAPPER("cpp");
-		MAKE_TOOLCHAIN_WRAPPER("g++");
-		MAKE_TOOLCHAIN_WRAPPER("gcc");
-		MAKE_TOOLCHAIN_WRAPPER("ld");
-		MAKE_TOOLCHAIN_WRAPPER("lto-dump");
-		MAKE_TOOLCHAIN_WRAPPER("nm");
-		MAKE_TOOLCHAIN_WRAPPER("objcopy");
-		MAKE_TOOLCHAIN_WRAPPER("objdump");
-		MAKE_TOOLCHAIN_WRAPPER("ranlib");
-		MAKE_TOOLCHAIN_WRAPPER("readelf");
-		MAKE_TOOLCHAIN_WRAPPER("size");
-		MAKE_TOOLCHAIN_WRAPPER("strings");
-		MAKE_TOOLCHAIN_WRAPPER("strip");
-		foundValidCrossCompiler = true;
-		getcwd(compilerPath, sizeof(compilerPath) - 64);
-		strcat(compilerPath, "/cross/bin2");
-		SaveConfig();
 	} else if (0 == strcmp(l, "help") || 0 == strcmp(l, "h") || 0 == strcmp(l, "?")) {
 		printf(ColorHighlight "\n=== Common Commands ===\n" ColorNormal);
 		printf("build         (b)                 - Build.\n");
@@ -1889,9 +1702,204 @@ void DoCommand(const char *l) {
 		printf("ascii <string>                    - Convert a string to a list of ASCII codepoints.\n");
 		printf("a2l <executable>                  - Translate addresses to lines.\n");
 		printf("make-crash-report                 - Make a crash report.\n");
+	} else if (foundValidCrossCompiler) {
+		if (0 == strcmp(l, "b") || 0 == strcmp(l, "build")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, -1, LOG_NORMAL);
+		} else if (0 == strcmp(l, "opt") || 0 == strcmp(l, "build-optimised")) {
+			BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, -1, LOG_NORMAL);
+		} else if (0 == strcmp(l, "d") || 0 == strcmp(l, "debug")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, true /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "dlv")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, true /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
+		} else if (0 == strcmp(l, "d3") || 0 == strcmp(l, "debug-without-compile")) {
+			BuildAndRun(OPTIMISE_OFF, false /* compile */, true /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "v") || 0 == strcmp(l, "vbox")) {
+			BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
+		} else if (0 == strcmp(l, "v2") || 0 == strcmp(l, "vbox-without-opt")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
+		} else if (0 == strcmp(l, "v3") || 0 == strcmp(l, "vbox-without-compile")) {
+			BuildAndRun(OPTIMISE_OFF, false /* compile */, false /* debug */, EMULATOR_VIRTUALBOX, LOG_NORMAL);
+		} else if (0 == strcmp(l, "t") || 0 == strcmp(l, "qemu-with-opt")) {
+			BuildAndRun(OPTIMISE_ON, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "t2") || 0 == strcmp(l, "test")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "t3") || 0 == strcmp(l, "qemu-without-compile")) {
+			BuildAndRun(OPTIMISE_OFF, false /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "t4")) {
+			BuildAndRun(OPTIMISE_FULL, true /* compile */, false /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "e")) {
+			Run(EMULATOR_QEMU, LOG_NORMAL, DEBUG_LATER);
+		} else if (0 == strcmp(l, "k") || 0 == strcmp(l, "qemu-with-kvm")) {
+			BuildAndRun(OPTIMISE_FULL, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "kno")) {
+			BuildAndRun(OPTIMISE_ON, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "kd")) {
+			BuildAndRun(OPTIMISE_OFF, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_NORMAL);
+		} else if (0 == strcmp(l, "klv")) {
+			BuildAndRun(OPTIMISE_FULL, true /* compile */, DEBUG_NONE /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
+		} else if (0 == strcmp(l, "tlv")) {
+			BuildAndRun(OPTIMISE_ON, true /* compile */, DEBUG_LATER /* debug */, EMULATOR_QEMU, LOG_VERBOSE);
+		} else if (0 == strcmp(l, "compile") || 0 == strcmp(l, "c")) {
+			LoadOptions();
+			Compile(COMPILE_FOR_EMULATOR, atoi(GetOptionString("Emulator.PrimaryDriveMB")), NULL);
+		} else if (0 == strcmp(l, "build-cross")) {
+			BuildCrossCompiler();
+			SaveConfig();
+			printf("Please restart the build system.\n");
+			exit(0);
+		} else if (0 == strcmp(l, "build-utilities") || 0 == strcmp(l, "u")) {
+			BuildUtilities();
+		} else if (0 == memcmp(l, "live ", 5) || 0 == strcmp(l, "live")) {
+			if (interactiveMode) {
+				fprintf(stderr, "This command cannot be used in interactive mode. Type \"quit\" and then run \"./start.sh live <...>\".\n");
+				return true;
+			}
+
+			if (argc < 4) {
+				fprintf(stderr, "Usage: \"./start.sh live <iso/raw> <drive size in MB> [extra options]\".\n");
+				return true;
+			}
+
+			bool wantISO = 0 == strcmp(argv[2], "iso");
+			uint32_t flags = OPTIMISE_ON | COMPILE_DO_BUILD;
+			const char *label = NULL;
+
+			for (int i = 4; i < argc; i++) {
+				if (0 == strcmp(argv[i], "noopt")) {
+					flags &= ~OPTIMISE_ON;
+					flags |= OPTIMISE_OFF;
+				} else if (0 == memcmp(argv[i], "label=", 6)) {
+					label = argv[i] + 6;
+				}
+			}
+
+			forceRebuild = true;
+			Compile(flags, atoi(argv[3]), label);
+
+			if (encounteredErrors) {
+				printf("\033[0;33mBuild failed.\n" ColorNormal);
+				return true;
+			}
+
+			if (!wantISO) {
+				printf("You can copy the image to the device with "
+						ColorHighlight "sudo dd if=bin/drive of=<path to drive> bs=1024 count=%d conv=notrunc" ColorNormal "\n", 
+						atoi(argv[3]) * 1024);
+				return true;
+			}
+
+			if (CallSystem("xorriso --version")) {
+				printf("\033[0;33mCould not produce iso image; xorriso not found.\n" ColorNormal);
+				return true;
+			}
+
+			char buffer[512];
+			FILE *f = fopen("bin/drive", "rb");
+			fseek(f, 0x102000, SEEK_SET);
+			fread(buffer, 1, sizeof(buffer), f);
+			fclose(f);
+
+			if (memcmp(buffer, "!EssenceFS2", 11)) {
+				printf("\033[0;33mCould not produce iso image (1).\n" ColorNormal);
+				return true;
+			}
+
+			f = fopen("bin/appuse.txt", "wb");
+			fprintf(f, "Essence::%.*s", 16, buffer + 152);
+			fclose(f);
+
+			unlink("bin/essence.iso");
+
+			if (CallSystem("xorriso -rockridge \"off\" -outdev bin/essence.iso -blank as_needed -volid \"Essence Installation Disc\" "
+					"-map bin/drive /ESSENCE.DAT -boot_image any bin_path=/ESSENCE.DAT -boot_image any emul_type=hard_disk "
+					"-application_use bin/appuse.txt")) {
+				printf("\033[0;33mCould not produce iso image (2).\n" ColorNormal);
+				return true;
+			}
+
+			printf("Created " ColorHighlight "bin/essence.iso" ColorNormal ".\n");
+		} else if (0 == strcmp(l, "build-port") || 0 == memcmp(l, "build-port ", 11)) {
+			bool alreadyNamedPort = l[10] == ' ';
+			char *l2 = NULL;
+
+			if (!alreadyNamedPort) {
+				printf("\nAvailable ports:\n");
+				DIR *directory = opendir("ports");
+				struct dirent *entry;
+
+				while ((entry = readdir(directory))) {
+					char buffer[4096];
+					snprintf(buffer, sizeof(buffer), "ports/%s/port.sh", entry->d_name);
+					FILE *f = fopen(buffer, "rb");
+
+					if (f) {
+						printf("\t%s\n", entry->d_name);
+						fclose(f);
+					}
+				}
+
+				closedir(directory);
+
+				LoadOptions();
+
+				if (!IsOptionEnabled("Flag.ENABLE_POSIX_SUBSYSTEM")) {
+					printf("\nMost ports require the POSIX subsystem to be enabled.\n");
+					printf("Run " ColorHighlight "config" ColorNormal " and select " ColorHighlight "Flag.ENABLE_POSIX_SUBSYSTEM" ColorNormal " to enable it.\n");
+				}
+
+				printf("\nEnter the port to be built: ");
+				size_t pos;
+				getline(&l2, &pos, stdin);
+				l2[strlen(l2) - 1] = 0;
+			} else {
+				l2 = (char *) l + 11;
+			}
+
+			int status = CallSystemF("ports/%s/port.sh", l2);
+
+			if (!alreadyNamedPort) {
+				free(l2);
+			}
+
+			if (automatedBuild) {
+				exit(status);
+			}
+		} else if (0 == strcmp(l, "setup-pre-built-toolchain")) {
+			CallSystem("mv bin/source cross");
+			CallSystem("mkdir -p cross/bin2");
+	#define MAKE_TOOLCHAIN_WRAPPER(tool) \
+			CallSystem("gcc -o cross/bin2/" TOOLCHAIN_PREFIX "-" tool " util/toolchain_wrapper.c -Wall -Wextra -Wno-format-truncation -g -DTOOL=" TOOLCHAIN_PREFIX "-" tool)
+			MAKE_TOOLCHAIN_WRAPPER("addr2line");
+			MAKE_TOOLCHAIN_WRAPPER("ar");
+			MAKE_TOOLCHAIN_WRAPPER("as");
+			MAKE_TOOLCHAIN_WRAPPER("c++");
+			MAKE_TOOLCHAIN_WRAPPER("cpp");
+			MAKE_TOOLCHAIN_WRAPPER("g++");
+			MAKE_TOOLCHAIN_WRAPPER("gcc");
+			MAKE_TOOLCHAIN_WRAPPER("ld");
+			MAKE_TOOLCHAIN_WRAPPER("lto-dump");
+			MAKE_TOOLCHAIN_WRAPPER("nm");
+			MAKE_TOOLCHAIN_WRAPPER("objcopy");
+			MAKE_TOOLCHAIN_WRAPPER("objdump");
+			MAKE_TOOLCHAIN_WRAPPER("ranlib");
+			MAKE_TOOLCHAIN_WRAPPER("readelf");
+			MAKE_TOOLCHAIN_WRAPPER("size");
+			MAKE_TOOLCHAIN_WRAPPER("strings");
+			MAKE_TOOLCHAIN_WRAPPER("strip");
+			foundValidCrossCompiler = true;
+			getcwd(compilerPath, sizeof(compilerPath) - 64);
+			strcat(compilerPath, "/cross/bin2");
+			SaveConfig();
+		} else {
+			goto commandFail;
+		}
 	} else {
+commandFail:
 		printf("Unrecognised command '%s'. Enter 'help' to get a list of commands.\n", l);
+		return false;
 	}
+
+	return true;
 }
 
 int main(int _argc, char **_argv) {
@@ -1961,6 +1969,24 @@ int main(int _argc, char **_argv) {
 
 	const char *runFirstCommand = NULL;
 
+	char cmdBuffer[4096];
+	if (argc >= 2) {
+		cmdBuffer[0] = 0;
+
+		for (int i = 1; i < argc; i++) {
+			if (strlen(argv[i]) + 1 > sizeof(cmdBuffer) - strlen(cmdBuffer)) break;
+			if (i > 1) strcat(cmdBuffer, " ");
+			strcat(cmdBuffer, argv[i]);
+		}
+
+        // attempt to run command before compiling toolchain, exit if command ran successfully
+		if (DoCommand(cmdBuffer)) {
+			return 0;
+		}
+	} else {
+		interactiveMode = true;
+	}
+
 	if (CallSystem("" TOOLCHAIN_PREFIX "-gcc --version > /dev/null 2>&1 ")) {
 #if defined(__linux__) && defined(__x86_64__)
 		fprintf(stderr, "Downloading the compiler toolchain...\n");
@@ -1975,20 +2001,10 @@ int main(int _argc, char **_argv) {
 		foundValidCrossCompiler = true;
 	}
 
+    // Retry command after compiling toolchain if command previously couldn't run
 	if (argc >= 2) {
-		char buffer[4096];
-		buffer[0] = 0;
-
-		for (int i = 1; i < argc; i++) {
-			if (strlen(argv[i]) + 1 > sizeof(buffer) - strlen(buffer)) break;
-			if (i > 1) strcat(buffer, " ");
-			strcat(buffer, argv[i]);
-		}
-
-		DoCommand(buffer);
+		DoCommand(cmdBuffer);
 		return 0;
-	} else {
-		interactiveMode = true;
 	}
 
 	SaveConfig();
