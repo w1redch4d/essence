@@ -15,7 +15,7 @@ util/uefi_compile.sh
 mkdir -p mount
 LODEV=$(losetup -f)
 sudo losetup --offset `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$2}'` --sizelimit `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$4}'` $LODEV bin/uefi_drive
-# sudo mkfs.fat $LODEV
+sudo mkfs.fat $LODEV
 sudo mount $LODEV mount
 sudo mkdir -p mount/EFI/BOOT
 sudo cp bin/uefi mount/EFI/BOOT/BOOTX64.EFI
