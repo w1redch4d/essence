@@ -20,7 +20,7 @@ sudo mount $LODEV mount
 sudo mkdir -p mount/EFI/BOOT
 sudo cp bin/uefi mount/EFI/BOOT/BOOTX64.EFI
 sudo cp bin/uefi mount/es.efi
-sudo cp bin/Kernel.esx mount/eskernel.esx
+sudo cp ./root/Essence/Kernel.esx mount/eskernel.esx
 sudo cp bin/uefi_loader mount/esloader.bin
 sudo cp bin/iid.dat mount/esiid.dat
 sudo umount $LODEV
