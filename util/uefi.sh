@@ -13,17 +13,18 @@ set -e
 util/uefi_compile.sh
 
 mkdir -p mount
-sudo losetup --offset `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$2}'` --sizelimit `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$4}'` /dev/loop0 bin/uefi_drive
-# sudo mkfs.fat /dev/loop0
-sudo mount /dev/loop0 mount
+LODEV=$(losetup -f)
+sudo losetup --offset `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$2}'` --sizelimit `fdisk -l bin/uefi_drive | grep 'EFI System' | awk '{print 512*$4}'` $LODEV bin/uefi_drive
+# sudo mkfs.fat $LODEV
+sudo mount $LODEV mount
 sudo mkdir -p mount/EFI/BOOT
 sudo cp bin/uefi mount/EFI/BOOT/BOOTX64.EFI
 sudo cp bin/uefi mount/es.efi
 sudo cp bin/Kernel.esx mount/eskernel.esx
 sudo cp bin/uefi_loader mount/esloader.bin
 sudo cp bin/iid.dat mount/esiid.dat
-sudo umount /dev/loop0
-sudo losetup --detach /dev/loop0
+sudo umount $LODEV
+sudo losetup --detach $LODEV
 rmdir mount
 
 dd if=bin/drive of=bin/uefi_drive bs=512 count=`fdisk -l bin/drive | grep 'Linux' | awk '{print $5}'` skip=`fdisk -l bin/drive | grep 'Linux' | awk '{print $3}'` seek=`fdisk -l bin/uefi_drive | grep 'Linux filesystem' | awk '{print $2}'` conv=notrunc
