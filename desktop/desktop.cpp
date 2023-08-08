@@ -3213,6 +3213,8 @@ void DesktopSendMessage(EsMessage *message) {
 			}
 		}
 
+		message->device.handle = handle;
+
 		if (message->device.type == ES_DEVICE_CLOCK) {
 			EsDateComponents reading;
 			uint64_t linear;
