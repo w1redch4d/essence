@@ -133,8 +133,6 @@ bool GPTGetPartitions(uint8_t *block /* K_SIGNATURE_BLOCK_SIZE */, EsFileOffset 
 		partitionEntryCount = GPT_PARTITION_COUNT;
 	}
 
-	bool foundESP = false;
-
 	for (uintptr_t i = 0; i < partitionEntryCount; i++) {
 		uint8_t *entry = block + sectorBytes * 2 + i * partitionEntryBytes;
 
@@ -147,22 +145,14 @@ bool GPTGetPartitions(uint8_t *block /* K_SIGNATURE_BLOCK_SIZE */, EsFileOffset 
 			continue;
 		}
 
-		if ((!guidLow && !guidHigh) || firstLBA >= sectorCount || lastLBA >= sectorCount || firstLBA >= lastLBA) {
+		if (firstLBA >= sectorCount || lastLBA >= sectorCount || firstLBA > lastLBA) {
 			return false;
 		}
 
 		partitions[i].present = true;
 		partitions[i].offset = firstLBA;
-		partitions[i].count = lastLBA - firstLBA;
+		partitions[i].count = lastLBA - firstLBA + 1;
 		partitions[i].isESP = guidLow == 0x11D2F81FC12A7328 && guidHigh == 0x3BC93EC9A0004BBA;
-
-		if (partitions[i].isESP) {
-			if (foundESP) {
-				return false;
-			} else {
-				foundESP = true;
-			}
-		}
 	}
 
 	return true;
