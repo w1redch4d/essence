@@ -171,11 +171,13 @@ char commonCompileFlagsWithCStdLib[4096];
 char cCompileFlags[4096] = "";
 char cppCompileFlags[4096] = " -std=c++14 -Wno-pmf-conversions -Wno-invalid-offsetof -fno-rtti ";
 char kernelCompileFlags[4096] = " -fno-omit-frame-pointer ";
+char multiboot2LoaderCompileFlags[4096] = " -m32 -fno-common -g -mno-mmx -mno-sse -mno-sse2 -mno-ssse3 -mno-sse4 ";
 char applicationLinkFlags[4096] = " -ffreestanding -nostdlib -lgcc -g -z max-page-size=0x1000 ";
 char apiLinkFlags1[4096] = " -T util/linker/api64.ld -ffreestanding -nostdlib -g -z max-page-size=0x1000 -Wl,--start-group "; // TODO Don't hardcode the target.
 char apiLinkFlags2[4096] = " -lgcc ";
 char apiLinkFlags3[4096] = " -Wl,--end-group -Lroot/Applications/POSIX/lib ";
 char kernelLinkFlags[4096] = " -ffreestanding -nostdlib -lgcc -g -z max-page-size=0x1000 ";
+char multiboot2LoaderLinkFlags[4096] = " -nostdlib  -melf_i386 --no-dynamic-linker -Tboot/x86/mb2_link.sc -g ";
 char commonAssemblyFlags[4096] = " -Fdwarf ";
 const char *desktopProfilingFlags = "";
 
@@ -1096,6 +1098,15 @@ void ParseKernelConfiguration() {
 	DeleteFile("bin/dependency_files/system_config.d");
 }
 
+void LinkMultiboot2Loader() {
+	if (Execute(toolchainLD, "bin/Object Files/mb2_loader.o", "bin/Object Files/mb2.o", ArgString(multiboot2LoaderLinkFlags), "-o" "bin/Multiboot2Loader")) {
+		return;
+	}
+
+	Execute(toolchainStrip, "-o", "bin/Stripped Executables/Multiboot2Loader", "--strip-all", "bin/Multiboot2Loader");
+	CopyFile("bin/Stripped Executables/Multiboot2Loader", "root/" SYSTEM_FOLDER_NAME "/Multiboot2Loader.elf", false);
+}
+
 void LinkKernel() {
 	if (encounteredErrorsInKernelModules) {
 		return;
@@ -1155,6 +1166,13 @@ void BuildKernel(Application *application) {
 	ExecuteForApp(application, toolchainCXX, "-MD", "-MF", "bin/dependency_files/kernel.d", "-c", "kernel/main.cpp", "-o", "bin/Object Files/kernel.o", 
 			ArgString(kernelCompileFlags), ArgString(cppCompileFlags), ArgString(commonCompileFlags), buffer);
 	if (application->error) __sync_fetch_and_or(&encounteredErrorsInKernelModules, 1);
+}
+
+void BuildMultiboot2Loader(Application *application) {
+	ExecuteForApp(application, toolchainCXX, "-MD", "-MF", "bin/dependency_files/mb2.d", "-c", "boot/x86/mb2.c", "-o", "bin/Object Files/mb2.o",
+			ArgString(multiboot2LoaderCompileFlags), ArgString(cppCompileFlags), ArgString(commonCompileFlags), buffer);
+	ExecuteForApp(application, toolchainCXX, "-MD", "-MF", "bin/dependency_files/mb2.d", "-c", "boot/x86/mb2_loader.S", "-o", "bin/Object Files/mb2_loader.o",
+			ArgString(multiboot2LoaderCompileFlags), ArgString(cppCompileFlags), ArgString(commonCompileFlags), buffer);
 }
 
 void BuildBootloader(Application *application) {
@@ -1620,6 +1638,15 @@ int main(int argc, char **argv) {
 			arrput(applications, application);
 		}
 
+		if (systemBuild) {
+			Application application = {};
+			application.name = "Multiboot2Loader";
+			application.buildCallback = BuildMultiboot2Loader;
+			ADD_DEPENDENCY_FILE(application, "bin/dependency_files/mb2.d", "Multiboot2Loader1");
+			ADD_DEPENDENCY_FILE(application, "bin/dependency_files/mb2_loader.d", "Multiboot2Loader2");
+			arrput(applications, application);
+		}
+
 		for (uintptr_t i = 0; i < arrlenu(applicationManifests); i++) {
 			ParseApplicationManifest(applicationManifests[i]);
 		}
@@ -1745,6 +1772,8 @@ int main(int argc, char **argv) {
 			if (!withoutKernel) {
 				LinkKernel();
 			}
+
+			LinkMultiboot2Loader();
 
 			OutputSystemConfiguration();
 		}
