@@ -1325,7 +1325,8 @@ void *MMMapPhysical(MMSpace *space, uintptr_t offset, size_t bytes, uint64_t cac
 
 	uintptr_t offset2 = offset & (K_PAGE_SIZE - 1);
 	offset -= offset2;
-	if (offset2) bytes += K_PAGE_SIZE;
+	bytes += offset2;
+	bytes = (bytes + K_PAGE_SIZE - 1) & ~(K_PAGE_SIZE - 1);
 
 	MMRegion *region;
 
