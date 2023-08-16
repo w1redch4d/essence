@@ -150,15 +150,21 @@ void ACPIParseTables() {
 	bool isXSDT = false;
 
 	if (acpi.rsdp) {
+		uint64_t sdt_address;
+
 		if (acpi.rsdp->revision == 2 && acpi.rsdp->xsdtAddress) {
 			isXSDT = true;
-			sdt = (ACPIDescriptorTable *) acpi.rsdp->xsdtAddress;
+			sdt_address = acpi.rsdp->xsdtAddress;
 		} else {
 			isXSDT = false;
-			sdt = (ACPIDescriptorTable *) (uintptr_t) acpi.rsdp->rsdtAddress;
+			sdt_address = acpi.rsdp->rsdtAddress;
 		}
 
-		sdt = (ACPIDescriptorTable *) MMMapPhysical(kernelMMSpace, (uintptr_t) sdt, 16384, ES_FLAGS_DEFAULT);
+
+		ACPIDescriptorTable *tmp_sdt = (ACPIDescriptorTable *) MMMapPhysical(kernelMMSpace, sdt_address, sizeof(ACPIDescriptorTable), ES_FLAGS_DEFAULT);
+		uint32_t len_sdt = tmp_sdt->length < 16384 ? tmp_sdt->length : 16384;
+		MMFree(kernelMMSpace, tmp_sdt);
+		sdt = (ACPIDescriptorTable *) MMMapPhysical(kernelMMSpace, sdt_address, len_sdt, ES_FLAGS_DEFAULT);
 	} else {
 		KernelPanic("ACPIInitialise - Could not find supported root system descriptor pointer.\nACPI support is required.\n");
 	}
