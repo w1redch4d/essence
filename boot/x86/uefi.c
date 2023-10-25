@@ -75,8 +75,10 @@ typedef struct MemoryRegion {
 
 #define MAX_MEMORY_REGIONS (1024)
 MemoryRegion memoryRegions[1024];
-#define KERNEL_BUFFER_SIZE (1048576)
-#define kernelBuffer ((char *) 0x200000)
+#define KERNEL_BUFFER_ADDRESS (0x200000)
+#define KERNEL_BUFFER_SIZE (0x200000)
+#define kernelBuffer ((char *) KERNEL_BUFFER_ADDRESS)
+#define KERNEL_BUFFER_END (KERNEL_BUFFER_ADDRESS + KERNEL_BUFFER_SIZE)
 #define IID_BUFFER_SIZE (16)
 char iidBuffer[IID_BUFFER_SIZE];
 #define MEMORY_MAP_BUFFER_SIZE (16384)
@@ -118,12 +120,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *_systemTabl
 	uint32_t *framebuffer, horizontalResolution, verticalResolution, pixelsPerScanline;
 	ElfHeader *header;
 
-	// Make sure 0x100000 -> 0x300000 is identity mapped.
+	// Make sure 0x100000 -> 0x400000 is identity mapped.
 	{
 		EFI_PHYSICAL_ADDRESS address = 0x100000;
 
-		if (EFI_SUCCESS != uefi_call_wrapper(systemTable->BootServices->AllocatePages, 4, AllocateAddress, EfiLoaderData, 0x200, &address)) {
-			Error(L"Error: Could not allocate 1MB->3MB.\n");
+		if (EFI_SUCCESS != uefi_call_wrapper(systemTable->BootServices->AllocatePages, 4, AllocateAddress, EfiLoaderData, (KERNEL_BUFFER_END - address) >> 12, &address)) {
+			Error(L"Error: Could not allocate 1MB->4MB.\n");
 		}
 	}
 
@@ -245,7 +247,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *_systemTabl
 		for (uintptr_t i = 0; i < size / descriptorSize && memoryRegionCount != MAX_MEMORY_REGIONS - 1; i++) {
 			EFI_MEMORY_DESCRIPTOR *descriptor = (EFI_MEMORY_DESCRIPTOR *) (memoryMapBuffer + i * descriptorSize);
 
-			if (descriptor->Type == EfiConventionalMemory && descriptor->PhysicalStart >= 0x300000) {
+			if (descriptor->Type == EfiConventionalMemory && descriptor->PhysicalStart >= KERNEL_BUFFER_END) {
 				memoryRegions[memoryRegionCount].base = descriptor->PhysicalStart;
 				memoryRegions[memoryRegionCount].pages = descriptor->NumberOfPages;
 				memoryRegionCount++;
