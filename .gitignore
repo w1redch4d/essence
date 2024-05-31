@@ -2,6 +2,7 @@
 *.swo
 tags
 .project.gf
+.vscode
 
 bin/
 cross/
